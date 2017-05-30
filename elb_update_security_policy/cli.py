@@ -1,9 +1,10 @@
-import argparse
-import fnmatch, re
+import fnmatch
+import re
 import sys
 import time
 from .util import common_parser, common_args, catch_sigint
 from .UpdateSecurityPolicy import UpdateSecurityPolicy
+
 
 def elb_update_security_policy():
     exitcode = 0
@@ -38,6 +39,7 @@ def elb_update_security_policy():
 
     rc = UpdateSecurityPolicy(args.region)
     elbs = rc.get_all_elbs()
+    sys.stdout.write('found %i elbs\n\n' % len(elbs))
     timestamp = int(time.time())
 
     for elb in elbs:
@@ -49,7 +51,7 @@ def elb_update_security_policy():
             else:
                 match = fnmatch.fnmatch(elb.name, r)
             if match:
-                matches += 1;
+                matches += 1
 
         if matches == 0:
             continue
@@ -66,7 +68,7 @@ def elb_update_security_policy():
             sys.stdout.write('create elb %s policy %s ref %s\n' \
                     % (elb.name, policyname, args.new))
             ret = rc.create_policy(elb.name, policyname, args.new)
-            if ret == False:
+            if ret is False:
                 exitcode = 1
                 sys.stdout.write('failed creating elb %s policy %s ref %s\n' \
                         % (elb.name, policyname, args.new))
@@ -84,7 +86,7 @@ def elb_update_security_policy():
                             l.load_balancer_port,
                             policyname
                             )
-                    if ret == False:
+                    if ret is False:
                         exitcode = 1
 
     sys.exit(exitcode)

@@ -12,7 +12,7 @@ class UpdateSecurityPolicy():
 
     def __init__(self, region):
         self.region = region
-        self.rate_limit_delay = 0
+        self.rate_limit_delay = 5
         self.elb = boto.ec2.elb.connect_to_region(self.region)
         self.account_id = None
 
@@ -22,22 +22,17 @@ class UpdateSecurityPolicy():
             self.account_id = iam.get_user()['get_user_response']['get_user_result']['user']['arn'].split(':')[4]
         return self.account_id
 
-    def get_all_elbs(self):
-        self.elbs = list()
-        marker = None
+    def get_all_elbs(self, marker=None, elbs=list()):
+        elb_call = self.wrap_aws_call(
+                self.elb.get_all_load_balancers,
+                marker=marker
+                )
+        elbs.extend(elb_call)
+        if elb_call.next_marker:
+            marker = elb_call.next_marker
+            return self.get_all_elbs(marker, elbs)
 
-        while True:
-            elbs = self.wrap_aws_call(
-                    self.elb.get_all_load_balancers,
-                    marker=marker
-                    )
-            self.elbs.extend(elbs)
-            if elbs.next_marker:
-                marker = elbs.next_marker
-            else:
-                break
-
-        return self.elbs
+        return elbs
 
     def update_elb(self, name, port, new):
         try:
@@ -57,11 +52,22 @@ class UpdateSecurityPolicy():
         policyattributes = { 'Reference-Security-Policy': refname }
         try:
             ret = self.wrap_aws_call(
+                    self.elb.delete_lb_policy,
+                    name,
+                    policyname
+                    )
+            ret = self.wrap_aws_call(
                     self.elb.create_lb_policy,
                     name,
                     policyname,
                     'SSLNegotiationPolicyType',
                     policyattributes
+                    )
+            ret = self.wrap_aws_call(
+                    self.elb.set_lb_policies_of_listener,
+                    name,
+                    443,
+                    policyname
                     )
         except BotoServerError as e:
             sys.stderr.write('failed creating elb %s policy %s: %s\n' % (
@@ -95,7 +101,7 @@ class UpdateSecurityPolicy():
                         self.rate_limit_delay = 1
                         sys.stderr.write('rate-limited: attempt %d\n' % \
                                 attempts)
-                    elif self.rate_limit_delay < 16:
+                    elif self.rate_limit_delay < 100:
                         self.rate_limit_delay = self.rate_limit_delay * 2
                         sys.stderr.write('rate-limited: attempt %d\n' % \
                                 attempts)
